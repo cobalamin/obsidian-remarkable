@@ -1,7 +1,7 @@
 {
-  "name": "obsidian-sample-plugin",
+  "name": "remarkable-obsidian",
   "version": "0.12.0",
-  "description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+  "description": "A plugin to integrate the reMarkable tablet into an Obsidian workflow, allowing users to insert drawings as nicely styled transparent images",
   "main": "main.js",
   "scripts": {
     "dev": "rollup --config rollup.config.js -w",
@@ -19,5 +19,9 @@
     "rollup": "^2.32.1",
     "tslib": "^2.2.0",
     "typescript": "^4.2.4"
+  },
+  "dependencies": {
+    "moment": "^2.29.1",
+    "sharp": "^0.28.3"
   }
 }
