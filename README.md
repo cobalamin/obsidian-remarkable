@@ -70,3 +70,8 @@ I might relax these requirements in the future if people want to do fancier stuf
 - [ ] rM integration that goes beyond the screenshot feature. Maybe you have some ideas for that?
 
 If you'd like to see any new features implemented and could help me out, let me know via the Issues.
+
+
+### Disclaimer
+
+This project is not affiliated to, nor endorsed by, reMarkable AS. **I assume no responsibility for any damage done to your device due to the use of this software.**
