@@ -2,6 +2,9 @@
 
 This a plugin integrating the [reMarkable](https://remarkable.com) paper tablet with the note-taking software [Obsidian](https://obsidian.md). More specifically, it takes a screenshot from your reMarkable (via USB or WiFi, however you prefer), saves it as a .png files in your Vault, optionally post-processes it, and inserts the image in your currently open note.
 
+![Preview of the plugin functionality](https://user-images.githubusercontent.com/669103/123702539-8c2c2f80-d863-11eb-952d-acbb8df0a146.gif)
+
+
 ### Installation
 
 #### Prerequisites
