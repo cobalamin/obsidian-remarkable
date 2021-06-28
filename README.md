@@ -1,57 +1,69 @@
-## Obsidian Sample Plugin
+## Obsidian & reMarkable
 
-This is a sample plugin for Obsidian (https://obsidian.md).
+This a plugin integrating the [reMarkable](https://remarkable.com) paper tablet with the note-taking software [Obsidian](https://obsidian.md). More specifically, it takes a screenshot from your reMarkable (via USB or WiFi, however you prefer), saves it as a .png files in your Vault, optionally post-processes it, and inserts the image in your currently open note.
 
-This project uses Typescript to provide type checking and documentation.
-The repo depends on the latest plugin API (obsidian.d.ts) in Typescript Definition format, which contains TSDoc comments describing what it does.
+### Installation
 
-**Note:** The Obsidian API is still in early alpha and is subject to change at any time!
+#### Prerequisites
 
-This sample plugin demonstrates some of the basic functionality the plugin API can do.
-- Changes the default font color to red using `styles.css`.
-- Adds a ribbon icon, which shows a Notice when clicked.
-- Adds a command "Open Sample Modal" which opens a Modal.
-- Adds a plugin setting tab to the settings page.
-- Registers a global click event and output 'click' to the console.
-- Registers a global interval which logs 'setInterval' to the console.
+- Set up [reSnap](https://github.com/cloudsftp/reSnap) on your reMarkable tablet and on your computer.
+- Set up your reMarkable so you have passwordless access over SSH, see https://www.reddit.com/r/RemarkableTablet/comments/78u90n/passwordless_ssh_setup_for_remarkable_tablet/
+- Install and activate this plugin in Obsidian.
 
-### First time developing plugins?
+Now, go to this plugin's settings page and configure them as described below.
 
-Quick starting guide for new plugin devs:
+#### Settings
+Open the settings window for this plugin, and:
+- "reSnap executable": Enter the absolute path to the previously installed `reSnap.sh`.
+- "reMarkable IP": Enter the IP address of your rM. If you have your rM connected via cable, this should just be `10.11.99.1`. If you want to use this plugin's functionality over WiFi, get the rM's IP via its menu, under *Help > Copyrights and licenses*, and there at the bottom.
+- Enter the output folder in your Vault where you would like the plugin to store the images captured from your rM.
 
-- Make a copy of this repo as a template with the "Use this template" button (login to GitHub if you don't see it).
-- Clone your repo to a local development folder. For convenience, you can place this folder in your `.obsidian/plugins/your-plugin-name` folder.
-- Install NodeJS, then run `npm i` in the command line under your repo folder.
-- Run `npm run dev` to compile your plugin from `main.ts` to `main.js`.
-- Make changes to `main.ts` (or create new `.ts` files). Those changes should be automatically compiled into `main.js`.
-- Reload Obsidian to load the new version of your plugin.
-- Enable plugin in settings window.
-- For updates to the Obsidian API run `npm update` in the command line under your repo folder.
+### Usage
 
-### Releasing new releases
+There are two commands:
 
-- Update your `manifest.json` with your new version number, such as `1.0.1`, and the minimum Obsidian version required for your latest release.
-- Update your `versions.json` file with `"new-plugin-version": "minimum-obsidian-version"` so older versions of Obsidian can download an older version of your plugin that's compatible.
-- Create new GitHub release using your new version number as the "Tag version". Use the exact version number, don't include a prefix `v`. See here for an example: https://github.com/obsidianmd/obsidian-sample-plugin/releases
-- Upload the files `manifest.json`, `main.js`, `styles.css` as binary attachments.
-- Publish the release.
+- *Insert a drawing from the reMarkable*
+- *Insert a landscape-format drawing from the reMarkable*
 
-### Adding your plugin to the community plugin list
+They do exactly what they say (the first inserts in portrait mode). Simply use them via the command pane, or configure some keyboard shortcuts.
 
-- Publish an initial version.
-- Make sure you have a `README.md` file in the root of your repo.
-- Make a pull request at https://github.com/obsidianmd/obsidian-releases to add your plugin.
+#### Postprocessing script
+Optionally, you can add a postprocessing script that further modifies the captured images. As an example, I've added the Python script I use. It
 
-### How to use
+- automatically removes the menu and buttons
+- crops away any remaining whitespace
+- turns the white background transparent
 
-- Clone this repo.
-- `npm i` or `yarn` to install dependencies
-- `npm run dev` to start compilation in watch mode.
+It was used for the example workflow shown in the GIF at the beginning of this file. This script is available as `postprocess_example.py` in this repository. It requires the Python packages `numpy` and `PIL` to be installed and available.
 
-### Manually installing the plugin
+You can, however, run anything you'd like as a postprocessing script. The only requirements of this plugin is that whatever script you use
 
-- Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/your-plugin-id/`.
+- receives one argument: the absolute path to the captured image file
+- overwrites this image file in-place, also using the PNG output format
 
-### API Documentation
+I might relax these requirements in the future if people want to do fancier stuff with it.
 
-See https://github.com/obsidianmd/obsidian-api
+### Tips
+
+- If you are using Dark Mode, I would recommend to add a CSS rule that inverts the captured images, so black pen strokes become white and stand out nicely. My plugin can't automatically tell apart images captured from the rM and other images, so I followed these steps:
+  - In this plugin's settings, set an output folder that is used *solely* for rM captures and has an unique name. I used `rM drawings`.
+  - Added a CSS snippet (see *Appearance* tab in Obsidian settings) with the following content:
+  ```css
+  body.theme-dark img[src*="rM%20drawings"] {
+    filter: invert(1);
+  }
+  ```
+  - Enable this snippet :)
+- I would recommend also installing [Ozan's Image in Editor Plugin](https://github.com/ozntel/oz-image-in-editor-obsidian), which will show you the captured images directly in editor mode.
+- If you want to make your rM handwriting searchable, you might like to try the [Obsidian OCR plugin](https://github.com/schlundd/obsidian-ocr-plugin). I've not tested it extensively, but it worked well on some semi-clean handwriting I tried.
+
+
+### Possible future features
+
+- [ ] Configurable output file name patterns
+- [ ] Other available sources for screenshots besides the reMarkable, making this a general plugin for quickly inserting image content from your favorite devices
+- [ ] Automatically tell apart rM captures from other images, for automatic dark-mode styling (but I don't know how I would do that)
+- [ ] Integration with the reMarkable's own OCR feature (but this will be very slow, unlike this plugin currently)
+- [ ] rM integration that goes beyond the screenshot feature. Maybe you have some ideas for that?
+
+If you'd like to see any new features implemented and could help me out, let me know via the Issues.

@@ -1,10 +1,10 @@
 {
-	"id": "remarkable-obsidian",
-	"name": "reMarkable Obsidian",
+	"id": "obsidian-remarkable",
+	"name": "Obsidian & reMarkable",
 	"version": "1.0.1",
 	"minAppVersion": "0.9.12",
-	"description": "A plugin to integrate the reMarkable tablet into an Obsidian workflow, allowing users to insert drawings as nicely styled transparent images",
+	"description": "A plugin to integrate the reMarkable tablet into an Obsidian workflow, allowing users to insert drawings captured from their reMarkable",
 	"author": "Simon Welker (cobalamin)",
 	"authorUrl": "https://github.com/cobalamin",
-	"isDesktopOnly": false
+	"isDesktopOnly": true
 }

@@ -1,169 +1,300 @@
-import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, MarkdownView } from 'obsidian';
+const spawn = require('child_process').spawn;
+const path = require('path');
+
+//import * as moment from 'moment';
+import { App, Modal, Notice, Plugin, PluginSettingTab, Editor,
+         Setting, MarkdownView, MarkdownSourceView, FileSystemAdapter } from 'obsidian';
+
+import * as obsidian from 'obsidian';
+
 import moment from 'moment';
-import { spawn } from 'child_process';
-import path from 'path';
 
 interface MyPluginSettings {
     reSnapPath: string;
     invertRemarkableImages: boolean;
     outputPath: string;
+    rmAddress: string;
+    postprocessor: string;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
     reSnapPath: '',
     invertRemarkableImages: true,
-    outputPath: '.'
+    outputPath: '.',
+    rmAddress: '10.11.99.1',
+    postprocessor: ''
 }
+
+function mkCheckCallback(innerFn: () => any): (checking: boolean) => boolean {
+    return function checkCallback(checking: boolean): boolean {
+        let leaf = this.app.workspace.activeLeaf;
+        let view = leaf.view;
+        if (leaf) {
+            const result = view instanceof MarkdownView && view.currentMode instanceof MarkdownSourceView;
+            if (result && !checking) {
+                innerFn.call(this);
+            }
+            return result;
+        }
+        return false;
+    };
+}
+
 
 export default class MyPlugin extends Plugin {
     settings: MyPluginSettings;
     cm: CodeMirror.Editor;
 
     async onload() {
-	//console.log('loading reMarkable Obsidian');
-	await this.loadSettings();
+        await this.loadSettings();
+        const plugin = this;
 
-	this.addRibbonIcon('dice', 'reMarkable Obsidian', () => {
-	    new Notice('This is a notice!');
-	});
+        this.addCommand({
+            id: 'insert-remarkable-drawing',
+            name: 'Insert a drawing from the reMarkable',
+            checkCallback: mkCheckCallback(plugin.tryInsertingDrawing.bind(plugin, false)).bind(plugin)
+        });
 
-	this.app.moment = moment;
+        this.addCommand({
+            id: 'insert-remarkable-drawing-landscape',
+            name: 'Insert a landscape-format drawing from the reMarkable',
+            checkCallback: mkCheckCallback(plugin.tryInsertingDrawing.bind(plugin, true)).bind(plugin)
+        });
 
-	//this.addStatusBarItem().setText('Status Bar Text');
+        this.addSettingTab(new SampleSettingTab(this.app, this));
 
-	this.addCommand({
-	    id: 'insert-remarkable-drawing',
-	    name: 'Insert a drawing from the reMarkable',
-	    checkCallback: (checking: boolean) => {
-		let leaf = this.app.workspace.activeLeaf;
-		let view = leaf.view;
-		if (leaf) {
-		    const result = true;//view instanceof MarkdownSourceView; is not working... always false.
-		    if (result && !checking) {
-			this.tryInsertingDrawing();
-		    }
-		    return result;
-		}
-		return false;
-	    }
-	});
+        this.registerCodeMirror((cm: CodeMirror.Editor) => {
+            this.cm = cm;
+        });
 
-	this.addSettingTab(new SampleSettingTab(this.app, this));
-
-	this.registerCodeMirror((cm: CodeMirror.Editor) => {
-	    this.cm = cm;
-	});
-
-	this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-	    //console.log('click', evt);
-	});
+        this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
+            //console.log('click', evt);
+        });
     }
 
     onunload() {
-	//console.log('unloading reMarkable Obsidian');
     }
 
     async loadSettings() {
-	this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     }
 
     async saveSettings() {
-	await this.saveData(this.settings);
+        await this.saveData(this.settings);
     }
 
-    async callReSnap() {
-	const { reSnapPath } = this.settings;
-	const { spawn } = require('child_process');
-	const executable = reSnapPath;
+    async runProcess(executable_path: string, args: string[]): Promise<Record<'stderr' | 'stdout', string>> {
+        let outputs: Record<'stderr' | 'stdout', string> = {
+            'stderr': '',
+            'stdout': ''
+        };
+        return new Promise(function (resolve, reject) {
+            const process = spawn(executable_path, args);
+            process.stdout.on('data', (data: string) => { outputs.stdout += data; });
+            process.stderr.on('data', (data: string) => { outputs.stderr += data; });
 
-	const now = moment();
-	const drawingFileName = `rM drawing ${now.format("YYYY-MM-DD-HH.mm.ss")}.png`;
-	const vaultAbsPath = this.app.vault.adapter.basePath;
-	const attachmentFolder = this.app.vault.getConfig('attachmentFolderPath');
-	const drawingFilePath = path.join(vaultAbsPath, attachmentFolder, drawingFileName);
-
-	return new Promise(function (resolve, reject) {
-	    const args = ['-o', drawingFilePath];
-	    const process = spawn(executable, args);
-
-	    let stdout = "";
-	    let stderr = "";
-	    process.stdout.on('data', (data) => { stdout += data; });
-	    process.stderr.on('data', (data) => { stderr += data; });
-
-	    process.on('close', async function (code: Number) {
-		if(code === 0) {
-		    resolve(drawingFileName);
-		}
-		else {
-		    reject("Nonzero exitcode. STDERR: " + stderr + "\n STDOUT: " + stdout);
-		}
-	    });
-	    process.on('error', function (err: String) {
-		reject(err);
-	    });
-	});
+            process.on('close', async function (code: number) {
+                if(code === 0) {
+                    resolve(outputs);
+                }
+                else {
+                    reject("Nonzero exitcode.\nSTDERR: " + outputs.stderr
+                        + "\nSTDOUT: " + outputs.stdout);
+                }
+            });
+            process.on('error', function (err: string) {
+                reject(err);
+            });
+        });
     }
 
-    async tryInsertingDrawing() {
-	let success = false;
-	try {
-	    const drawingFileName = await this.callReSnap();
-	    this.editor.replaceRange(`![[${drawingFileName}]]`, this.editor.getCursor());
+    async callReSnap(landscape: boolean) {
+        const { reSnapPath, rmAddress } = this.settings;
+        const { spawn } = require('child_process');
 
-	    new Notice('Inserted the rM drawing!');
-	    return true;
-	} catch(error) {
-	    console.error('[reMarkable-Obsidian:reSnap]', error);
-	    new Notice('Failed to insert rM drawing! Errors printed to console.');
-	    return false;
-	}
+        let vaultAbsPath;
+        const adapter = this.app.vault.adapter;
+        if (adapter instanceof FileSystemAdapter) {
+            vaultAbsPath = adapter.getBasePath();
+        }
+        else {
+            // Not on desktop, thus there is no basePath available. Cancel execution.
+            new Notice('Could not get vault path! Is this running on mobile...?');
+            return;
+        }
+
+        const now = moment();
+        const drawingFileName = `rM drawing ${now.format("YYYY-MM-DD-HH.mm.ss")}.png`;
+        const absOutputFolderPath = this.resolveLibraryPath(this.settings.outputPath);
+        const drawingFilePath = path.join(absOutputFolderPath, drawingFileName);
+
+        let args = ['-o', drawingFilePath, '-s', rmAddress];
+        if(landscape) {
+            args = args.concat(['-l']);
+        }
+
+        const { stderr, stdout } = await this.runProcess(reSnapPath, args);
+        return { drawingFilePath, drawingFileName };
     }
 
-    /* shamelessly stolen from hans/obsidian-citation-plugin */
-    get editor(): CodeMirror.Editor {
-	const view = this.app.workspace.activeLeaf.view;
-	if (!(view instanceof MarkdownView)) return null;
+    async postprocessDrawing(drawingFilePath: string) {
+        const { postprocessor } = this.settings;
+        if (postprocessor) {
+            const args = [drawingFilePath];
+            const { stderr, stdout } = await this.runProcess(postprocessor, args);
+        }
+        return true;
+    }
 
-	const sourceView = view.sourceMode;
-	return (sourceView as MarkdownSourceView).cmEditor;
+    async tryInsertingDrawing(landscape: boolean) {
+        let success = false;
+        new Notice('Inserting rM drawing...', 1000);
+
+        try {
+            // remember the editor here, so the user could change mode (e.g. preview mode)
+            // in the meantime without an error
+	    const editor = this.editor;
+            const { drawingFilePath, drawingFileName } = await this.callReSnap(landscape);
+            await this.postprocessDrawing(drawingFilePath); // no-op if no postprocessor set
+
+            editor.replaceRange(`![[${drawingFileName}]]`, editor.getCursor());
+            new Notice('Inserted your rM drawing!');
+            return true;
+        } catch(error) {
+            new Notice('Could not insert your rM drawing! Is your tablet connected ' +
+                       'and reachable at the configured address?');
+            throw error;
+            return false;
+        }
+    }
+
+    /* Taken and adapted from hans/obsidian-citation-plugin. Cheers! */
+    get editor(): Editor {
+        const view = this.app.workspace.activeLeaf.view;
+        if (!(view instanceof MarkdownView) || !(view.currentMode instanceof MarkdownSourceView)) return null;
+        return view.editor;
+    }
+
+    /* Taken from hans/obsidian-citation-plugin. Cheers! */
+    resolveLibraryPath(rawPath: string): string {
+        const vaultRoot =
+            this.app.vault.adapter instanceof FileSystemAdapter
+            ? this.app.vault.adapter.getBasePath()
+            : '/';
+        return path.resolve(vaultRoot, rawPath);
     }
 }
 
 class SampleSettingTab extends PluginSettingTab {
     plugin: MyPlugin;
+    outputPathInfo: HTMLElement;
+    outputPathError: HTMLElement;
+    outputPathSuccess: HTMLElement;
 
     constructor(app: App, plugin: MyPlugin) {
-	super(app, plugin);
-	this.plugin = plugin;
+        super(app, plugin);
+        this.plugin = plugin;
+    }
+
+    /**
+     * Taken and modified from hans/obsidian-citation-plugin. Cheers!
+     * Returns true iff the path exists (relative to the vault directory).
+     * Displays error/success/info in the settings as a side-effect.
+     */
+    async checkOutputFolder(outputFolder: string): Promise<boolean> {
+        this.outputPathInfo.addClass('d-none');
+
+        try {
+            const adapter = this.app.vault.adapter;
+            if (adapter instanceof FileSystemAdapter) {
+                const resolvedPath = outputFolder;//this.plugin.resolveLibraryPath(outputFolder);
+                const exists = await adapter.exists(resolvedPath);
+                //if(!exists) { throw new Error('Chosen output folder does not exist!'); }
+                const stat = await adapter.stat(resolvedPath);
+                if(stat.type !== 'folder') { throw new Error('Chosen output folder is not a folder!'); }
+            }
+            else {
+                throw new Error('Could not get FileSystemAdapter! Is this running on mobile...?');
+            }
+        } catch (e) {
+            this.outputPathSuccess.addClass('d-none');
+            this.outputPathError.removeClass('d-none');
+            return false;
+        } finally {
+            this.outputPathInfo.addClass('d-none');
+        }
+
+        return true;
     }
 
     display(): void {
-	let {containerEl} = this;
+        let {containerEl} = this;
 
-	containerEl.empty();
-	containerEl.createEl('h2', {text: 'Settings for reMarkable Obsidian'});
+        containerEl.empty();
+        containerEl.createEl('h2', {text: 'Obsidian & reMarkable'});
 
-	new Setting(containerEl)
-	    .setName('reSnap executable')
-	    .setDesc('The path to the reSnap executable')
-	    .addText(text => text
-	    .setPlaceholder('Please paste in an absolute path')
-	    .setValue(this.plugin.settings.reSnapPath)
-	    .onChange(async (value) => {
-		this.plugin.settings.reSnapPath = value;
-		await this.plugin.saveSettings();
-	    }));
+        new Setting(containerEl)
+            .setName('reMarkable IP')
+            .setDesc('The IP address of your reMarkable. Use 10.11.99.1 and connect via cable if unsure.')
+            .addText(text => text
+            .setPlaceholder('Example: 10.11.99.1')
+            .setValue(this.plugin.settings.rmAddress)
+            .onChange(async (value) => {
+                this.plugin.settings.rmAddress = value;
+                await this.plugin.saveSettings();
+            }));
 
-	new Setting(containerEl)
-	    .setName('Output folder')
-	    .setDesc('The folder where rM drawing images should be stored')
-	    .addText(text => text
-	    .setPlaceholder('Type in a folder from your Vault')
-	    .setValue(this.plugin.settings.outputPath)
-	    .onChange(async (value) => {
-		this.plugin.settings.outputPath = value;
-		await this.plugin.saveSettings();
-	    }));
+        new Setting(containerEl)
+            .setName('reSnap executable')
+            .setDesc('The path to the reSnap executable')
+            .addText(text => text
+            .setPlaceholder('Paste in the absolute path to reSnap.sh')
+            .setValue(this.plugin.settings.reSnapPath)
+            .onChange(async (value) => {
+                this.plugin.settings.reSnapPath = value;
+                await this.plugin.saveSettings();
+            }));
+
+        new Setting(containerEl)
+            .setName('Output folder')
+            .setDesc('The folder where rM drawing images should be stored')
+            .addText(text => text
+            .setPlaceholder('Some folder from your Vault')
+            .setValue(this.plugin.settings.outputPath)
+            .onChange(async (value) => {
+                let success = await this.checkOutputFolder(value);
+                if(success) {
+                    this.plugin.settings.outputPath = value;
+                    await this.plugin.saveSettings();
+
+                    this.outputPathError.addClass('d-none');
+                    this.outputPathSuccess.removeClass('d-none');
+                }
+            }));
+        this.outputPathInfo = containerEl.createEl('p', {
+            cls: 'remarkable-output-path-info d-none',
+            text: 'Checking output folder...',
+        });
+        this.outputPathError = containerEl.createEl('p', {
+            cls: 'remarkable-output-path-error d-none',
+            text: 'The output folder does not seem to exist. ' +
+                  'Please type in a path to a folder that exists inside the vault.'
+        });
+        this.outputPathSuccess = containerEl.createEl('p', {
+            cls: 'remarkable-output-path-success d-none',
+            text: 'Successfully set the output folder.',
+        });
+
+        new Setting(containerEl)
+            .setName('Postprocessing script')
+            .setDesc('The absolute path to a script that post-processes the captured image. ' +
+                'The script will be passed the filename and should overwrite the file with a modified version.')
+            .addText(text => text
+            .setPlaceholder('/some/path/to/some/script')
+            .setValue(this.plugin.settings.postprocessor)
+            .onChange(async (value) => {
+                this.plugin.settings.postprocessor = value;
+                await this.plugin.saveSettings();
+            }));
     }
 }

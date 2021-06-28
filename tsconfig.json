@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
