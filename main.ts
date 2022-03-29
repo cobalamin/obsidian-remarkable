@@ -177,13 +177,14 @@ export default class MyPlugin extends Plugin {
         const view = this.app.workspace.activeLeaf.view;
         try {
             if (view.editMode.type == "source") {
-                console.log("Found CM editor")
                 return view.editor;
             }
+	    else {
+		return null;
+	    }
         }
         catch (error) {
-            console.log("Could not locate CM editor")
-            return null
+            return null;
         }
     }
 
