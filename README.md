@@ -11,7 +11,7 @@ This a plugin integrating the [reMarkable](https://remarkable.com) paper tablet 
 
 - Set up [reSnap](https://github.com/cloudsftp/reSnap) on your reMarkable tablet and on your computer.
 - Set up your reMarkable so you have passwordless access over SSH, see https://www.reddit.com/r/RemarkableTablet/comments/78u90n/passwordless_ssh_setup_for_remarkable_tablet/
-- Install and activate this plugin in Obsidian.
+- Install and activate this plugin in Obsidian, either directly or via the [Obsidian42 BRAT plugin](https://github.com/TfTHacker/obsidian42-brat)
 
 Now, go to this plugin's settings page and configure them as described below.
 
