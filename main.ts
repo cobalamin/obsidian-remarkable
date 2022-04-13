@@ -52,13 +52,17 @@ export default class MyPlugin extends Plugin {
         this.addCommand({
             id: 'insert-remarkable-drawing',
             name: 'Insert a drawing from the reMarkable',
-            checkCallback: mkCheckCallback(plugin.tryInsertingDrawing.bind(plugin, false)).bind(plugin)
+            callback: () => {
+                plugin.tryInsertingDrawing(false)
+            }
         });
 
         this.addCommand({
             id: 'insert-remarkable-drawing-landscape',
             name: 'Insert a landscape-format drawing from the reMarkable',
-            checkCallback: mkCheckCallback(plugin.tryInsertingDrawing.bind(plugin, true)).bind(plugin)
+            callback: () => {
+                plugin.tryInsertingDrawing(true)
+            }
         });
 
         this.addSettingTab(new SampleSettingTab(this.app, this));
@@ -125,7 +129,7 @@ export default class MyPlugin extends Plugin {
 
         const now = moment();
         const drawingFileName = `rM drawing ${now.format("YYYY-MM-DD-HH.mm.ss")}.png`;
-        const absOutputFolderPath = this.resolveLibraryPath(this.settings.outputPath);
+        const absOutputFolderPath = adapter.getFullRealPath(this.settings.outputPath);
         const drawingFilePath = path.join(absOutputFolderPath, drawingFileName);
 
         let args = ['-o', drawingFilePath, '-s', rmAddress];
@@ -171,8 +175,17 @@ export default class MyPlugin extends Plugin {
     /* Taken and adapted from hans/obsidian-citation-plugin. Cheers! */
     get editor(): Editor {
         const view = this.app.workspace.activeLeaf.view;
-        if (!(view instanceof MarkdownView) || !(view.currentMode instanceof MarkdownSourceView)) return null;
-        return view.editor;
+        try {
+            if (view.editMode.type == "source") {
+                return view.editor;
+            }
+	    else {
+		return null;
+	    }
+        }
+        catch (error) {
+            return null;
+        }
     }
 
     /* Taken from hans/obsidian-citation-plugin. Cheers! */
@@ -208,8 +221,6 @@ class SampleSettingTab extends PluginSettingTab {
             const adapter = this.app.vault.adapter;
             if (adapter instanceof FileSystemAdapter) {
                 const resolvedPath = outputFolder;//this.plugin.resolveLibraryPath(outputFolder);
-                const exists = await adapter.exists(resolvedPath);
-                //if(!exists) { throw new Error('Chosen output folder does not exist!'); }
                 const stat = await adapter.stat(resolvedPath);
                 if(stat.type !== 'folder') { throw new Error('Chosen output folder is not a folder!'); }
             }
@@ -217,11 +228,11 @@ class SampleSettingTab extends PluginSettingTab {
                 throw new Error('Could not get FileSystemAdapter! Is this running on mobile...?');
             }
         } catch (e) {
-            this.outputPathSuccess.addClass('d-none');
-            this.outputPathError.removeClass('d-none');
+            this.outputPathSuccess.style.display = "none";
+            this.outputPathError.style.display = "block";
             return false;
         } finally {
-            this.outputPathInfo.addClass('d-none');
+            this.outputPathInfo.style.display = "none";
         }
 
         return true;
@@ -266,9 +277,8 @@ class SampleSettingTab extends PluginSettingTab {
                 if(success) {
                     this.plugin.settings.outputPath = value;
                     await this.plugin.saveSettings();
-
-                    this.outputPathError.addClass('d-none');
-                    this.outputPathSuccess.removeClass('d-none');
+                    this.outputPathError.style.display = "none";
+                    this.outputPathSuccess.style.display = "block";
                 }
             }));
         this.outputPathInfo = containerEl.createEl('p', {
@@ -284,6 +294,9 @@ class SampleSettingTab extends PluginSettingTab {
             cls: 'remarkable-output-path-success d-none',
             text: 'Successfully set the output folder.',
         });
+        this.outputPathInfo.style.display = "none";
+        this.outputPathError.style.display = "none";
+        this.outputPathSuccess.style.display = "none";
 
         new Setting(containerEl)
             .setName('Postprocessing script')
