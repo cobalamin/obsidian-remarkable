@@ -113,7 +113,7 @@ export default class MyPlugin extends Plugin {
     }
 
     async callReSnap(landscape: boolean) {
-        const { reSnapPath, rmAddress } = this.settings;
+        const { reSnapPath, rmAddress, invertRemarkableImages } = this.settings;
         const { spawn } = require('child_process');
 
         let vaultAbsPath;
@@ -134,8 +134,12 @@ export default class MyPlugin extends Plugin {
 
         let args = ['-o', drawingFilePath, '-s', rmAddress];
         if(landscape) {
-            args = args.concat(['-l']);
+            args.push('-l');
         }
+
+		if(invertRemarkableImages) {
+			args.push('-i');
+		}
 
         const { stderr, stdout } = await this.runProcess(reSnapPath, args);
         return { drawingFilePath, drawingFileName };
